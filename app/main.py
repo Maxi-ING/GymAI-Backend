@@ -6,6 +6,10 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 
 from app.core.config import get_settings
 from app.core.database import engine
+from app.modules.dashboard.router import router as dashboard_router
+from app.modules.predictions.router import router as predictions_router
+from app.modules.records.router import router as records_router
+from app.modules.users.router import router as users_router
 
 settings = get_settings()
 app = FastAPI(
@@ -44,8 +48,8 @@ def health():
     return {"status": "ok", "database": "ok"}
 
 
-from app.modules.records.router import router as records_router
-from app.modules.users.router import router as users_router
-
 app.include_router(users_router)
 app.include_router(records_router)
+
+app.include_router(dashboard_router)
+app.include_router(predictions_router)
