@@ -39,3 +39,16 @@ jobs:
       - run: alembic check
       - run: pytest -q --cov=app --cov-report=term-missing
       - run: alembic downgrade base && alembic upgrade head && alembic check
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/checkout@v4
+        with:
+          repository: Maxi-ING/Gym-Frontend
+          ref: 10b028030b02d8e8505423baf3d8ba9348e2b310
+          path: frontend
+      - run: npm ci --prefix frontend
+      - run: npm ci --prefix tests/browser
+      - run: npx --prefix tests/browser playwright install --with-deps chromium --only-shell
+      - run: python -m scripts.prepare_browser
+      - run: npm --prefix tests/browser test
