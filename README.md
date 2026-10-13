@@ -41,7 +41,7 @@ Luego crea tablas y datos iniciales:
 ```bash
 alembic upgrade head
 python -m app.cli seed-catalog
-python -m app.cli create-admin --nombre "Max Admin" --correo "tu-correo@example.com"
+python -m app.cli create-admin --nombre "Max Admin" --correo "htmaximo3904@gmail.com"
 uvicorn app.main:app --reload
 ```
 
@@ -73,6 +73,8 @@ Los routers delegan a servicios; los repositorios encapsulan consultas. La depen
 El esquema privado gym_app contiene usuarios, mediciones, ejercicios, sesiones, registros, metas, analisis y auditoria, además de la tabla de versión de Alembic. Correo único normalizado, claves foráneas, restricciones e índices.
 
 Las mediciones conservan la talla utilizada para calcular su IMC histórico. El estado de una meta se calcula desde el historial actual: borrar una sesión puede cambiarlo. El análisis guardado es una instantánea histórica y no se recalcula al editar el historial.
+
+Los correos requieren formato válido, sin comprobar DNS ni la existencia del buzón. La validación y normalización a minúsculas son compartidas por registro, login y edición.
 
 Las cuentas públicas siempre son usuario. Cada operación consulta el rol y estado actuales; los permisos no dependen de un rol antiguo en el JWT. La protección del último admin usa un bloqueo transaccional PostgreSQL. Desactivar ejercicios conserva registros y metas.
 
