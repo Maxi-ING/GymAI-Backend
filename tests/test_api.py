@@ -184,4 +184,5 @@ def test_current_role_is_checked_and_json_errors_do_not_echo_password(client, ad
     result = client.post(
         "/auth/register", json={"nombre": "Max123", "correo": "broken", "clave": "short"}
     )
-    assert result.status_code == 422 and "short" not in result.text
+    assert result.status_code == 422
+    assert all("input" not in error and "ctx" not in error for error in result.json()["detail"])
