@@ -105,6 +105,6 @@ Incluye aislamiento de cuentas, roles revocados, sesiones atómicas, catálogo i
 
 Sigue [Supabase, Render y Vercel](docs/despliegue.md). render.yaml y Dockerfile preparan la publicación; no significan que exista un servicio desplegado.
 
-Quedan por configurar los proyectos cloud, las credenciales, el origen de Vercel y el primer administrador real. Las pruebas CI utilizan PostgreSQL temporal, no tu proyecto Supabase. No se ha medido capacidad de usuarios concurrentes ni se ofrece un sistema de pagos, rutinas o entrenador.
+Supabase ya contiene las ocho tablas en gym_app, catálogo y administrador real. Consulta [estructura y demostración](docs/base-datos.md) y [consultas de solo lectura](docs/consultas-demostracion.sql). La conexión del frontend en Vercel requiere configurar VITE_API_URL y redesplegar. Las pruebas CI utilizan PostgreSQL temporal, no tu proyecto Supabase. No se ha medido capacidad de usuarios concurrentes ni se ofrece un sistema de pagos, rutinas o entrenador.
 
 Los commits son atómicos en español, con sufijos feat/test/docs según su propósito. Las funcionalidades se integran por PR a dev y después a main.
