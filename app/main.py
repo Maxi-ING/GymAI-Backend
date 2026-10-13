@@ -42,3 +42,10 @@ def health():
     with engine.connect() as connection:
         connection.execute(text("SELECT 1"))
     return {"status": "ok", "database": "ok"}
+
+
+from app.modules.records.router import router as records_router
+from app.modules.users.router import router as users_router
+
+app.include_router(users_router)
+app.include_router(records_router)
