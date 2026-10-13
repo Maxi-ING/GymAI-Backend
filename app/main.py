@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
@@ -56,3 +57,9 @@ app.include_router(dashboard_router)
 app.include_router(predictions_router)
 
 app.include_router(admin_router)
+
+
+@app.exception_handler(RequestValidationError)
+def validation_error(request, exc):
+    errors = [{"loc": e["loc"], "msg": e["msg"], "type": e["type"]} for e in exc.errors()]
+    return JSONResponse(status_code=422, content={"detail": errors})
