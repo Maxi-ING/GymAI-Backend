@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 
 from app.core.config import get_settings
 from app.core.database import engine
+from app.core.diagnostics import report_database_error
 from app.modules.admin.router import router as admin_router
 from app.modules.dashboard.router import router as dashboard_router
 from app.modules.predictions.router import router as predictions_router
@@ -37,6 +38,7 @@ def integrity_error(request, exc):
 
 @app.exception_handler(OperationalError)
 def database_error(request, exc):
+    report_database_error(exc)
     return JSONResponse(
         status_code=503,
         content={"detail": "La base de datos no está disponible. Intenta nuevamente."},
