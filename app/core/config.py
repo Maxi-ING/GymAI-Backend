@@ -1,8 +1,10 @@
 from functools import lru_cache
 from typing import Literal
+
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
@@ -16,7 +18,11 @@ class Settings(BaseSettings):
     @field_validator("database_url")
     @classmethod
     def postgres_only(cls, value: SecretStr):
-        if make_url(value.get_secret_value()).drivername not in {"postgresql", "postgres", "postgresql+psycopg"}:
+        if make_url(value.get_secret_value()).drivername not in {
+            "postgresql",
+            "postgres",
+            "postgresql+psycopg",
+        }:
             raise ValueError("DATABASE_URL debe corresponder a PostgreSQL.")
         return value
 
@@ -30,7 +36,9 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def production_origins(self):
-        if self.environment == "production" and (not self.cors_origins or any(not x.startswith("https://") for x in self.cors_origins)):
+        if self.environment == "production" and (
+            not self.cors_origins or any(not x.startswith("https://") for x in self.cors_origins)
+        ):
             raise ValueError("En producción configura orígenes HTTPS exactos.")
         if any(x == "*" or x.endswith("/") for x in self.cors_origins):
             raise ValueError("CORS_ORIGINS requiere orígenes exactos, sin barra final.")
@@ -39,6 +47,7 @@ class Settings(BaseSettings):
     @property
     def sqlalchemy_url(self):
         return make_url(self.database_url.get_secret_value()).set(drivername="postgresql+psycopg")
+
 
 @lru_cache
 def get_settings():
