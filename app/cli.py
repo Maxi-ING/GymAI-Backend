@@ -1,8 +1,10 @@
 import argparse
 from getpass import getpass
 
+from pydantic import ValidationError
 from sqlalchemy import select, text
 
+from app.core.bootstrap import AdminSettings
 from app.core.database import SessionFactory
 from app.core.security import hash_password
 from app.modules.admin.repository import ADMIN_LOCK
@@ -51,18 +53,34 @@ def main():
     parser.add_argument("command", choices=["seed-catalog", "create-admin"])
     parser.add_argument("--nombre")
     parser.add_argument("--correo")
+    parser.add_argument(
+        "--from-env",
+        action="store_true",
+        help="Lee ADMIN_NOMBRE, ADMIN_CORREO y ADMIN_CLAVE; también admite .env.admin.",
+    )
     args = parser.parse_args()
+    if args.from_env and (args.command != "create-admin" or args.nombre or args.correo):
+        parser.error("--from-env se usa únicamente con create-admin, sin --nombre ni --correo.")
+    data = None
+    if args.command == "create-admin":
+        try:
+            if args.from_env:
+                data = AdminSettings().registration()
+            else:
+                if not args.nombre or not args.correo:
+                    parser.error("create-admin requiere --nombre y --correo.")
+                password = getpass("Contraseña del administrador: ")
+                if password != getpass("Repite la contraseña: "):
+                    parser.error("Las contraseñas no coinciden.")
+                data = Registration(nombre=args.nombre, correo=args.correo, clave=password)
+        except ValidationError:
+            parser.error("Revisa nombre, formato del correo y contraseña de 8–128 caracteres.")
     with SessionFactory.begin() as db:
         if args.command == "seed-catalog":
             seed_catalog(db)
             print("Catálogo preparado sin duplicar ejercicios.")
         else:
-            if not args.nombre or not args.correo:
-                parser.error("create-admin requiere --nombre y --correo.")
-            password = getpass("Contraseña del administrador: ")
-            if password != getpass("Repite la contraseña: "):
-                raise ValueError("Las contraseñas no coinciden.")
-            create_admin(db, Registration(nombre=args.nombre, correo=args.correo, clave=password))
+            create_admin(db, data)
             print("Administrador preparado. No se modifica la contraseña de una cuenta existente.")
 
 

@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Annotated, Literal
 
-from pydantic import EmailStr, Field, field_validator, model_validator
+from pydantic import AfterValidator, EmailStr, Field, model_validator
 
 from app.core.validation import BusinessDate, Height, Input, Name, Output, Weight
 
@@ -9,18 +9,13 @@ Role = Literal["admin", "usuario"]
 Objective = Literal[
     "Ganar fuerza", "Ganar masa muscular", "Mejorar condición física", "Mantener actividad física"
 ]
-Email = Annotated[EmailStr, Field(max_length=254)]
+Email = Annotated[EmailStr, Field(max_length=254), AfterValidator(lambda value: str(value).lower())]
 Password = Annotated[str, Field(min_length=8, max_length=128)]
 
 
 class Credentials(Input):
     correo: Email
     clave: Annotated[str, Field(min_length=1, max_length=128)]
-
-    @field_validator("correo")
-    @classmethod
-    def normalize_email(cls, value):
-        return str(value).lower()
 
 
 class Registration(Credentials):
@@ -57,8 +52,6 @@ class AccountUpdate(Input):
         fields = {"edad", "talla_m", "peso_kg", "objetivo"}
         if self.model_fields_set & fields and not fields <= self.model_fields_set:
             raise ValueError("El perfil requiere edad, talla_m, peso_kg y objetivo juntos.")
-        if self.correo:
-            self.correo = str(self.correo).lower()
         return self
 
 
