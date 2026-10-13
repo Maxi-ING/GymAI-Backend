@@ -54,8 +54,13 @@ test('el frontend registra perfil y sesiones reales y consulta una predicción p
   await page.getByLabel('Ejercicio para analizar').selectOption('1');
   await page.getByText('3. Definir o revisar una meta', { exact: true }).click();
   await page.getByLabel('Carga objetivo (kg)').fill('50');
-  await page.getByRole('button', { name: 'Guardar meta' }).click();
-  await expect(page.getByRole('status').filter({ hasText: 'Meta guardada' })).toBeVisible();
+  const [savedGoal] = await Promise.all([
+    page.waitForResponse(response => response.url().endsWith('/metas') && response.request().method() === 'POST'),
+    page.getByRole('button', { name: 'Guardar meta' }).click(),
+  ]);
+  expect(savedGoal.status()).toBe(201);
+  const goal = await savedGoal.json();
+  await expect(page.getByLabel('Meta del análisis')).toHaveValue(String(goal.id));
   await page.getByRole('button', { name: 'Analizar mi progreso', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Tu tendencia de carga' })).toBeVisible();
   await expect(page.getByText('42 kg', { exact: true })).toBeVisible();
