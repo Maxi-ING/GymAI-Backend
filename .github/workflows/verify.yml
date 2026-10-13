@@ -1,0 +1,54 @@
+name: Verificar backend
+on:
+  push:
+    branches: [dev, 'feature/**']
+  pull_request:
+    branches: [dev, main]
+permissions:
+  contents: read
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: gym
+          POSTGRES_PASSWORD: gym_test
+          POSTGRES_DB: gym_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U gym -d gym_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://gym:gym_test@localhost:5432/gym_test
+      TEST_DATABASE_URL: postgresql+psycopg://gym:gym_test@localhost:5432/gym_test
+      JWT_SECRET: testing-only-random-like-secret-at-least-32-characters
+      ENVIRONMENT: test
+      AUTH_RATE_LIMIT: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check app migrations tests
+      - run: ruff format --check app migrations tests
+      - run: alembic upgrade head
+      - run: alembic check
+      - run: pytest -q --cov=app --cov-report=term-missing
+      - run: alembic downgrade base && alembic upgrade head && alembic check
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/checkout@v4
+        with:
+          repository: Maxi-ING/Gym-Frontend
+          ref: 10b028030b02d8e8505423baf3d8ba9348e2b310
+          path: frontend
+      - run: npm ci --prefix frontend
+      - run: npm ci --prefix tests/browser
+      - run: npx --prefix tests/browser playwright install --with-deps chromium --only-shell
+      - run: python -m scripts.prepare_browser
+      - run: npm --prefix tests/browser test
