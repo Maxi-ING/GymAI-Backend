@@ -43,6 +43,7 @@ class Registro(Base):
         CheckConstraint("repeticiones BETWEEN 1 AND 100", name="repeticiones"),
         CheckConstraint("carga_kg BETWEEN 0 AND 600", name="carga"),
         Index("ix_registros_sesion_ejercicio", "sesion_id", "ejercicio_id"),
+        Index("ix_registros_ejercicio_id", "ejercicio_id"),
     )
     id: Mapped[int] = mapped_column(primary_key=True)
     sesion_id: Mapped[int] = mapped_column(ForeignKey("gym_app.sesiones.id", ondelete="CASCADE"))

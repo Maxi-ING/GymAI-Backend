@@ -14,6 +14,7 @@ class Meta(Base):
     __table_args__ = (
         CheckConstraint("carga_objetivo_kg > 0 AND carga_objetivo_kg <= 600", name="carga"),
         Index("ix_metas_usuario_ejercicio", "usuario_id", "ejercicio_id"),
+        Index("ix_metas_ejercicio_id", "ejercicio_id"),
     )
     id: Mapped[int] = mapped_column(primary_key=True)
     usuario_id: Mapped[int] = mapped_column(ForeignKey("gym_app.usuarios.id"))
@@ -24,7 +25,11 @@ class Meta(Base):
 
 class Analisis(Base):
     __tablename__ = "analisis"
-    __table_args__ = (Index("ix_analisis_usuario_fecha", "usuario_id", "fecha"),)
+    __table_args__ = (
+        Index("ix_analisis_usuario_fecha", "usuario_id", "fecha"),
+        Index("ix_analisis_ejercicio_id", "ejercicio_id"),
+        Index("ix_analisis_meta_id", "meta_id"),
+    )
     id: Mapped[int] = mapped_column(primary_key=True)
     usuario_id: Mapped[int] = mapped_column(ForeignKey("gym_app.usuarios.id"))
     ejercicio_id: Mapped[int] = mapped_column(ForeignKey("gym_app.ejercicios.id"))
