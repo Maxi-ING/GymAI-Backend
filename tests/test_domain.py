@@ -137,3 +137,61 @@ def test_service_uses_a_substitute_predictor_without_training():
         == "Prueba"
     )
     assert repo.saved
+
+
+@pytest.mark.parametrize(
+    "email",
+    [
+        "sin-arroba",
+        "@example.com",
+        "max@",
+        "max@@example.com",
+        "max example@example.com",
+        "max@example",
+        "max@example..com",
+    ],
+)
+def test_email_format_is_rejected_everywhere(email):
+    from app.modules.admin.schemas import AdminCreate, AdminUpdate
+    from app.modules.users.schemas import Credentials
+
+    for schema, extra in [
+        (Registration, {"nombre": "Max Admin", "clave": "password-123"}),
+        (AdminCreate, {"nombre": "Max Admin", "clave": "password-123"}),
+        (Credentials, {"clave": "password-123"}),
+        (AccountUpdate, {}),
+        (AdminUpdate, {}),
+    ]:
+        with pytest.raises(ValidationError):
+            schema(correo=email, **extra)
+
+
+def test_email_is_normalized_without_dns_verification(monkeypatch):
+    import dns.resolver
+
+    from app.modules.admin.schemas import AdminUpdate
+
+    def no_network(*args, **kwargs):
+        raise AssertionError("El formato del correo no requiere consultar DNS.")
+
+    monkeypatch.setattr(dns.resolver.Resolver, "resolve", no_network)
+    email = "MAX@direccion-inventada-del-gimnasio-987654.com"
+    assert (
+        Registration(nombre="Max Admin", correo=email, clave="password-123").correo == email.lower()
+    )
+    assert AccountUpdate(correo=email).correo == email.lower()
+    assert AdminUpdate(correo=email).correo == email.lower()
+
+
+def test_admin_environment_validates_and_hides_the_password(monkeypatch):
+    from app.core.bootstrap import AdminSettings
+
+    monkeypatch.setenv("ADMIN_NOMBRE", "Max Admin")
+    monkeypatch.setenv("ADMIN_CORREO", "ADMIN@example.com")
+    monkeypatch.setenv("ADMIN_CLAVE", "testing-admin-123")
+    settings = AdminSettings(_env_file=None)
+    assert "testing-admin-123" not in repr(settings)
+    assert settings.registration().correo == "admin@example.com"
+    monkeypatch.setenv("ADMIN_CLAVE", "short")
+    with pytest.raises(ValidationError):
+        AdminSettings(_env_file=None).registration()

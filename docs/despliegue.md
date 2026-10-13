@@ -19,10 +19,20 @@ Desde una copia local del repositorio configura .env con la URL cloud y un JWT_S
 ```bash
 alembic upgrade head
 python -m app.cli seed-catalog
-python -m app.cli create-admin --nombre "Max Admin" --correo "tu-correo@example.com"
+python -m app.cli create-admin --nombre "Max Admin" --correo "htmaximo3904@gmail.com"
 ```
 
 El último comando solicita y confirma la contraseña sin mostrarla. No hay credenciales administrativas predeterminadas. Repetir seed-catalog no duplica ejercicios; create-admin no cambia contraseñas ni eleva cuentas existentes.
+
+El correo del administrador acordado es htmaximo3904@gmail.com. La contraseña elegida se introduce en privado; no forma parte del repositorio ni del frontend. Para una preparación sin interacción también puedes definir ADMIN_NOMBRE, ADMIN_CORREO y ADMIN_CLAVE en variables de entorno, o en un archivo local .env.admin excluido de Git, y ejecutar:
+
+```bash
+python -m app.cli create-admin --from-env
+```
+
+En Render configura esas variables como secretos antes de ejecutar el comando desde su consola. No las necesitas en Vercel. La configuración valida los datos antes de iniciar la transacción, oculta la contraseña en su representación y aplica el mismo hash Argon2 del registro. Este comando crea la cuenta únicamente en la base indicada por DATABASE_URL; preparar los valores no crea una cuenta en Supabase. Si ya existe ese administrador, conserva su contraseña. Una cuenta de usuario con el mismo correo requiere revisión administrativa; el comando no cambia su rol automáticamente.
+
+Los correos se validan por formato (parte local, @ y dominio), con un máximo de 254 caracteres y normalización a minúsculas. No se consulta DNS, no se envía un enlace de verificación y no se exige que el buzón exista. La misma regla se aplica al registro, login y edición por usuario o administrador.
 
 Las migraciones deben ejecutarse antes de publicar la API. No se ejecutan automáticamente al iniciar cada servidor. Alembic conserva su versión en gym_app.alembic_version. Revisa toda migración antes de aplicarla; no ejecutes downgrade en una base con datos reales sin una estrategia de respaldo.
 
