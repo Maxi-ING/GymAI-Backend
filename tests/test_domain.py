@@ -195,3 +195,23 @@ def test_admin_environment_validates_and_hides_the_password(monkeypatch):
     monkeypatch.setenv("ADMIN_CLAVE", "short")
     with pytest.raises(ValidationError):
         AdminSettings(_env_file=None).registration()
+
+
+def test_database_diagnostics_do_not_log_credentials(caplog):
+    from sqlalchemy.exc import OperationalError
+
+    from app.core.diagnostics import report_database_error
+
+    class Original(Exception):
+        sqlstate = "28P01"
+
+    error = OperationalError(
+        "query",
+        {"secret": "private-value"},
+        Original("password authentication failed postgresql://user:private-value@host"),
+    )
+    report_database_error(error)
+    assert "autenticacion_rechazada" in caplog.text
+    assert "28P01" in caplog.text
+    assert "private-value" not in caplog.text
+    assert "postgresql://" not in caplog.text
