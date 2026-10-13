@@ -9,7 +9,7 @@ from app.core.database import get_db
 from app.core.security import decode_token
 from app.modules.users.models import Usuario
 
-DB = Annotated[Session, Depends(get_db)]
+DB = Annotated[Session, Depends(get_db, scope="function")]
 bearer = HTTPBearer(auto_error=False)
 
 
