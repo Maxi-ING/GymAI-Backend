@@ -186,3 +186,66 @@ def test_current_role_is_checked_and_json_errors_do_not_echo_password(client, ad
     )
     assert result.status_code == 422
     assert all("input" not in error and "ctx" not in error for error in result.json()["detail"])
+
+
+def test_admin_provisioning_is_idempotent_and_preserves_existing_accounts(client, member):
+    import pytest
+
+    from app.cli import create_admin
+    from app.core.security import verify_password
+    from app.modules.users.schemas import Registration
+
+    data = Registration(
+        nombre="Provisioned Admin", correo="provisioned@example.com", clave="testing-admin-123"
+    )
+    with SessionFactory.begin() as db:
+        first = create_admin(db, data)
+        first_id, first_hash = first.id, first.clave_hash
+        again = create_admin(db, data.model_copy(update={"clave": "another-password-123"}))
+        assert again.id == first_id and again.clave_hash == first_hash
+        assert verify_password(data.clave, first_hash)
+        with pytest.raises(ValueError):
+            create_admin(db, data.model_copy(update={"correo": "alex@example.com"}))
+    token = client.post("/auth/login", json={"correo": data.correo, "clave": data.clave}).json()[
+        "access_token"
+    ]
+    assert (
+        client.get("/admin/resumen", headers={"Authorization": f"Bearer {token}"}).status_code
+        == 200
+    )
+
+
+def test_overview_reuses_history_and_preserves_achieved_goals(client, member):
+    from sqlalchemy import event
+
+    from app.core.database import engine
+
+    client.post(
+        "/sesiones", headers=member, json=session_payload(50, business_today() - timedelta(days=1))
+    )
+    client.post("/sesiones", headers=member, json=session_payload(40))
+    for target in [45, 60]:
+        assert (
+            client.post(
+                "/metas", headers=member, json={"ejercicio_id": 1, "carga_objetivo_kg": target}
+            ).status_code
+            == 201
+        )
+    queries = []
+
+    def record_query(connection, cursor, statement, parameters, context, executemany):
+        queries.append(statement)
+
+    event.listen(engine, "before_cursor_execute", record_query)
+    try:
+        response = client.get("/inicio", headers=member)
+    finally:
+        event.remove(engine, "before_cursor_execute", record_query)
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["progreso"]["total_sesiones"] == 2
+    assert [g["estado"] for g in data["metas"]] == ["alcanzada", "pendiente"]
+    assert data["metas"][0]["ultima_carga_kg"] == 40
+    assert data["metas"][0]["avance_porcentaje"] == 88.89
+    assert sum("FROM gym_app.sesiones" in q for q in queries) == 1
+    assert sum("FROM gym_app.registros" in q for q in queries) == 1
