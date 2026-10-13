@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 
 from app.core.config import get_settings
 from app.core.database import engine
+from app.modules.admin.router import router as admin_router
 from app.modules.dashboard.router import router as dashboard_router
 from app.modules.predictions.router import router as predictions_router
 from app.modules.records.router import router as records_router
@@ -53,3 +54,5 @@ app.include_router(records_router)
 
 app.include_router(dashboard_router)
 app.include_router(predictions_router)
+
+app.include_router(admin_router)
