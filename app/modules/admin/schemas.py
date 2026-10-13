@@ -36,8 +36,6 @@ class AdminUpdate(Input):
             getattr(self, f) is None for f in self.model_fields_set
         ):
             raise ValueError("Envía campos no nulos para actualizar.")
-        if self.correo:
-            self.correo = str(self.correo).lower()
         return self
 
 

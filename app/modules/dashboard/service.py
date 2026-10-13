@@ -3,10 +3,9 @@ from decimal import Decimal
 
 from fastapi import HTTPException
 
-from app.ml.predictor import PredictorLineal
 from app.modules.dashboard.repository import DashboardRepository
 from app.modules.predictions.repository import PredictionRepository
-from app.modules.predictions.service import PredictionService
+from app.modules.predictions.service import goal_summary
 
 
 class DashboardService:
@@ -21,6 +20,9 @@ class DashboardService:
         ):
             raise HTTPException(404, "Ejercicio no disponible.")
         sessions = self.repository.records.sessions(user_id, desde, hasta)
+        return self._progress(user_id, sessions, exercise_id)
+
+    def _progress(self, user_id, sessions, exercise_id=None):
         points = {}
         count, volume, max_load = 0, Decimal(0), None
         for session in sessions:
@@ -49,8 +51,11 @@ class DashboardService:
         }
 
     def performance(self, user_id):
+        return self._performance(self.repository.records.sessions(user_id))
+
+    def _performance(self, sessions):
         grouped = defaultdict(list)
-        for session in self.repository.records.sessions(user_id):
+        for session in sessions:
             maximums = {}
             for row in session.registros:
                 maximums[row.ejercicio_id] = max(
@@ -75,17 +80,16 @@ class DashboardService:
         ]
 
     def overview(self, user):
-        performance = self.performance(user.id)
+        sessions = self.repository.records.sessions(user.id)
+        performance = self._performance(sessions)
         latest = {row["ejercicio_id"]: row["ultima_carga_kg"] for row in performance}
-        goals_service = PredictionService(
-            PredictionRepository(self.repository.db), PredictorLineal()
-        )
+        best = {row["ejercicio_id"]: Decimal(str(row["mejor_carga_kg"])) for row in performance}
         goals = []
-        for item in goals_service.repository.goals(user.id):
+        for item in PredictionRepository(self.repository.db).goals(user.id):
             load = latest.get(item.ejercicio_id)
             goals.append(
                 {
-                    **goals_service.goal_result(item),
+                    **goal_summary(item, best.get(item.ejercicio_id)),
                     "ejercicio_nombre": item.ejercicio.nombre,
                     "ultima_carga_kg": load,
                     "avance_porcentaje": min(
@@ -132,7 +136,7 @@ class DashboardService:
                 }
             )
         return {
-            "progreso": self.progress(user.id),
+            "progreso": self._progress(user.id, sessions),
             "rendimiento": performance,
             "metas": goals,
             "ultimo_analisis": {
