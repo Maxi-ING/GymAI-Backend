@@ -5,6 +5,17 @@ from app.ml.preprocessing import weekly_loads
 from app.modules.predictions.repository import PredictionRepository
 
 
+def goal_summary(item, maximum):
+    return {
+        "id": item.id,
+        "ejercicio_id": item.ejercicio_id,
+        "carga_objetivo_kg": float(item.carga_objetivo_kg),
+        "estado": "alcanzada"
+        if maximum is not None and maximum >= item.carga_objetivo_kg
+        else "pendiente",
+    }
+
+
 class PredictionService:
     def __init__(self, repository: PredictionRepository, predictor: PredictorCarga):
         self.repository = repository
@@ -12,13 +23,7 @@ class PredictionService:
 
     def goal_result(self, item):
         rows = self.repository.rows(item.usuario_id, item.ejercicio_id)
-        achieved = bool(rows) and max(r.carga_kg for r in rows) >= item.carga_objetivo_kg
-        return {
-            "id": item.id,
-            "ejercicio_id": item.ejercicio_id,
-            "carga_objetivo_kg": float(item.carga_objetivo_kg),
-            "estado": "alcanzada" if achieved else "pendiente",
-        }
+        return goal_summary(item, max((r.carga_kg for r in rows), default=None))
 
     def create_goal(self, user, data):
         if not self.repository.exercise(data.ejercicio_id, active=True):
