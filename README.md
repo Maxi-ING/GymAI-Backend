@@ -82,9 +82,13 @@ El [contrato API](docs/api-contract.md) describe las rutas y formatos del fronte
 
 ## Modelo
 
-POST /analisis agrupa carga máxima por intervalos semanales desde el primer registro y conserva huecos. Con cuatro semanas distintas ajusta LinearRegression al historial de esa cuenta y ejercicio. Devuelve tendencia, siguiente carga estimada y, con meta pendiente, tiempo aproximado. No necesita model.joblib.
+POST /analisis compara únicamente registros de la misma cuenta, ejercicio y número de repeticiones. Agrupa la carga máxima por intervalos de siete días desde el primer registro comparable y conserva los huecos. Con cuatro semanas observadas ajusta LinearRegression. No necesita model.joblib, IA generativa ni agentes; los mensajes se producen mediante reglas.
 
-Los estados son historial_insuficiente, meta_alcanzada, sin_tendencia_positiva y estimado. La proyección visual se limita a doce semanas; la estimación hasta la meta puede ser mayor. No es una prescripción de carga ni existe evidencia de precisión con usuarios reales. Las recomendaciones por reglas se identifican como tales.
+La versión `lineal_comparable_v2` evalúa el error absoluto medio (MAE, kg) con validación temporal expansiva: cada semana de prueba se predice usando solo semanas anteriores. También informa el error de repetir la última carga observada como referencia. No se mezcla una carga a tres repeticiones con otra a ocho ni se convierte a 1RM.
+
+Los estados son historial_insuficiente, meta_alcanzada, sin_tendencia_positiva, no_estimable y estimado. Solo estimado publica una curva futura. Se rechaza la estimación con huecos mayores de cuatro semanas, última observación de más de 28 días, pendiente positiva menor de 0,05 kg/semana, MAE mayor de max(2 kg, 10 % de la mediana), o error mayor que 1,1 × MAE de referencia + 0,1 kg. Tampoco se publica una meta a más de doce semanas ni una curva fuera de 0–600 kg. Son reglas operativas del curso, no umbrales clínicos ni evidencia de precisión con deportistas reales.
+
+Las metas nuevas incluyen repeticiones_objetivo. Las metas antiguas conservan NULL: no se inventan repeticiones y la interfaz lo explica. Los análisis anteriores mantienen su JSON original y se identifican como anteriores hasta solicitar un análisis nuevo. La migración 0004 agrega únicamente el campo nullable y su restricción 1–100; no elimina ni recalcula datos.
 
 ## Pruebas
 
@@ -97,7 +101,7 @@ pytest -q
 
 Sin TEST_DATABASE_URL se ejecutan las pruebas unitarias y se omiten las de integración. Para ejecutar todas utiliza una **base de pruebas cuyo nombre termine en _test**, aplica migraciones sobre ella y configura TEST_DATABASE_URL. Las pruebas borran únicamente las tablas del esquema gym_app de esa base.
 
-GitHub Actions crea PostgreSQL 16, ejecuta todas las pruebas, verifica Alembic, revierte y reaplica las migraciones y prueba el frontend real en escritorio y móvil. El frontend está fijado al commit 10b028030b02d8e8505423baf3d8ba9348e2b310; actualizarlo requiere revisar el contrato.
+GitHub Actions crea PostgreSQL 16, ejecuta todas las pruebas, verifica Alembic, revierte y reaplica las migraciones y prueba el frontend real en escritorio y móvil. El frontend está fijado al commit 8625b39400c46a01380fe7dee7606d88168a1e1a; actualizarlo requiere revisar el contrato.
 
 Incluye aislamiento de cuentas, roles revocados, sesiones atómicas, catálogo inactivo, análisis guardado, correos duplicados y dos cambios de rol simultáneos. Las pruebas de navegador no interceptan las respuestas del backend.
 

@@ -2,7 +2,7 @@
 
 Todas las rutas reciben o devuelven JSON. Se usan nombres en español para mantener coherencia con el modelo. Las fechas tienen formato `YYYY-MM-DD`; pesos, cargas y volúmenes son números en kg; talla en metros. Las respuestas numéricas no deben serializarse como cadenas, aunque PostgreSQL use `NUMERIC`.
 
-Este contrato define lo que consume el frontend. La implementación del backend debe validarlo con pruebas reales; las respuestas de navegador usadas en los tests son interceptaciones.
+Este contrato define lo que consume el frontend. La implementación del backend debe validarlo con pruebas reales; el frontend tiene pruebas con interceptaciones y el backend añade pruebas de navegador contra la API y PostgreSQL reales.
 
 ## Autenticación y autorización
 
@@ -48,18 +48,20 @@ El backend valida y guarda perfil + medición de peso en una transacción, con f
 | GET `/sesiones`    | Sin cuerpo                                 | Lista de sesiones de la cuenta; `[]` si no hay datos                   |
 | POST `/mediciones` | `{ "fecha": "2026-10-10", "peso_kg": 80 }` | 201, `{ "id": 4, "fecha": "2026-10-10", "peso_kg": 80, "imc": 26.12 }` |
 
-Sesión de respuesta (para crearla, se omiten `id` y `volumen_kg`):
+Sesión de respuesta (para crearla, se omiten `id`, `volumen_kg` y `ejercicio_nombre`):
 
 ```json
 {
   "id": 9,
   "fecha": "2026-10-10",
-  "registros": [{ "ejercicio_id": 1, "series": 3, "repeticiones": 8, "carga_kg": 32 }],
+  "registros": [{ "ejercicio_id": 1, "ejercicio_nombre": "Press de banca", "series": 3, "repeticiones": 8, "carga_kg": 32 }],
   "volumen_kg": 768
 }
 ```
 
 Una sesión contiene de 1 a 20 registros. Series: enteros de 1 a 20; repeticiones: enteros de 1 a 100. Carga: de 0 a 600 kg, con una decimal como máximo. Meta: de 0,1 a 600 kg, con una decimal como máximo. Edad: 18 a 120; talla: 0,50 a 2,50 m; peso: 20 a 400 kg. Estos límites son validaciones técnicas del proyecto, no recomendaciones de entrenamiento. Las fechas van desde 2000-01-01 hasta la fecha actual de negocio; no pueden ser futuras ni inexistentes. Edad sin decimales; talla con hasta dos decimales y peso con una. Nombres personales: 2–100 caracteres, letras Unicode, espacios, puntos, apóstrofes y guiones; correo hasta 254 y contraseña de registro 8–128 caracteres. Nombre de ejercicio: 2–80 caracteres. El backend valida también estas restricciones.
+
+La respuesta incluye `ejercicio_nombre` también para ejercicios desactivados; el historial no depende del catálogo activo para mostrarlo. Se consulta el nombre actual del catálogo, no una copia histórica del nombre.
 
 Cada registro contiene series con la misma carga y repeticiones. Una misma sesión puede contener varias filas del mismo ejercicio. Si falla una fila, el backend revierte toda la sesión. Volumen = suma de series × repeticiones × carga de los registros; IMC = peso / talla². El frontend real representa estos resultados y no repite sus fórmulas.
 
@@ -81,17 +83,22 @@ Una fila de `puntos` por fecha, ordenada de forma ascendente. Para varios regist
 
 ## Metas y análisis
 
-GET `/metas`: lista de `{ "id": 2, "ejercicio_id": 1, "carga_objetivo_kg": 50, "estado": "pendiente" }`. Estado: `pendiente` o `alcanzada`.
+GET `/metas`: lista de `{ "id": 2, "ejercicio_id": 1, "carga_objetivo_kg": 50, "repeticiones_objetivo": 8, "estado": "pendiente" }`. Estado: `pendiente` o `alcanzada`.
 
-POST `/metas`: `{ "ejercicio_id": 1, "carga_objetivo_kg": 50 }`; devuelve la meta creada (201). Se admiten varias metas del mismo ejercicio; se selecciona una para analizar.
+POST `/metas`: `{ "ejercicio_id": 1, "carga_objetivo_kg": 50, "repeticiones_objetivo": 8 }`; devuelve la meta creada (201). Se admiten varias metas del mismo ejercicio; se selecciona una para analizar.
 
-POST `/analisis`: `{ "ejercicio_id": 1, "meta_id": 2 }`. `meta_id` es opcional: sin meta, analizar tendencia sin estimar semanas hasta el objetivo. Validar que la meta pertenece a la cuenta y al ejercicio seleccionado.
+POST `/analisis`: `{ "ejercicio_id": 1, "meta_id": 2, "repeticiones": 8 }`. `meta_id` es opcional: sin meta, analizar tendencia sin estimar semanas hasta el objetivo. Validar que la meta pertenece a la cuenta y al ejercicio seleccionado.
 
 ```json
 {
   "estado": "estimado",
   "mensaje": "La tendencia estimada es positiva.",
   "semanas_observadas": 8,
+  "modelo_version": "lineal_comparable_v2",
+  "repeticiones_analizadas": 8,
+  "error_mae_kg": 0,
+  "error_referencia_kg": 2,
+  "validaciones_temporales": 6,
   "pendiente_kg_semana": 2,
   "siguiente_carga_kg": 48,
   "semanas_hasta_meta": 2,
@@ -107,14 +114,17 @@ POST `/analisis`: `{ "ejercicio_id": 1, "meta_id": 2 }`. `meta_id` es opcional: 
 }
 ```
 
-El historial de este ejemplo está abreviado. `semana` representa intervalos de siete días desde la primera observación, empezando en cero; se conservan los saltos. Agrupar carga máxima semanal por cuenta y ejercicio. Al menos cuatro semanas distintas son necesarias. Entrenar LinearRegression en el backend y controlar datos no finitos.
+El historial de este ejemplo está abreviado. `semana` representa intervalos de siete días desde la primera observación, empezando en cero; se conservan los saltos. Agrupar carga máxima semanal por cuenta, ejercicio y repeticiones exactas. `repeticiones` y `repeticiones_objetivo` aceptan enteros 1–100; son opcionales para clientes anteriores. Una meta con repeticiones fija el grupo; pedir otras repeticiones produce 422. Sin criterio explícito se selecciona el grupo con más semanas observadas, después el más reciente y finalmente las menores repeticiones en caso de empate. Las metas antiguas conservan NULL y su criterio anterior; no se rellenan con repeticiones inventadas. Las metas nuevas solo se alcanzan con registros de sus repeticiones. Al menos cuatro semanas distintas son necesarias. Entrenar LinearRegression en el backend y controlar datos no finitos.
 
 | Estado                   | Comportamiento                                                           |
 | ------------------------ | ------------------------------------------------------------------------ |
 | `historial_insuficiente` | Sin proyección; indica cuántas semanas se observaron.                    |
 | `meta_alcanzada`         | Informa cumplimiento; sin fecha futura de logro.                         |
 | `sin_tendencia_positiva` | Informa tendencia nula o negativa; sin fecha de logro.                   |
+| `no_estimable`          | No estimable con suficiente fiabilidad; conserva historial y mensaje por reglas. |
 | `estimado`               | Devuelve tendencia y proyección. Sin meta, `semanas_hasta_meta` es null. |
+
+El MAE se calcula prediciendo cada semana posterior con un ajuste que usa solo el pasado y se compara con repetir la última carga. Se rechazan huecos >4 semanas, historia sin actualizar >28 días, pendiente positiva <0,05 kg/semana, MAE >max(2 kg, 10 % de la carga mediana), error >1,1 × referencia +0,1 kg, meta a >12 semanas o curva fuera de 0–600 kg. Son límites operativos del curso y no una garantía de exactitud. Los resultados históricos sin `modelo_version` conservan su significado anterior.
 
 Para estados sin estimación: `siguiente_carga_kg` y `semanas_hasta_meta` son null; `proyeccion` es `[]`. `pendiente_kg_semana` puede ser null si no se ajusta el modelo. La interfaz distingue estos estados y no muestra una estimación anterior cuando una nueva solicitud falla.
 
@@ -124,7 +134,7 @@ Para estados sin estimación: `siguiente_carga_kg` y `semanas_hasta_meta` son nu
 
 El registro público siempre crea `usuario`, sin aceptar un rol del cliente. Los endpoints `/admin/*` requieren `admin` en el servidor, con 403 para usuarios autenticados sin permiso. Los identificadores de usuario sirven como filtros administrativos y nunca sustituyen autorización. El administrador no puede desactivar su propia cuenta ni quitar su propio rol; el backend debe impedir además desactivar o degradar al último administrador activo, con una transacción que evite condiciones de carrera. Crear el primer administrador mediante un comando de configuración del backend, nunca desde el registro público.
 
-Usuario: Inicio, Entrenamiento, Análisis IA y Configuración; perfil desde la cuenta. Administrador: resumen global, Usuarios, Entrenamientos, Ejercicios y Configuración; cuenta propia desde el mismo menú. La interfaz administrativa no ejecuta el modelo. El usuario de demostración no accede a operaciones administrativas del adaptador local. Los datos de demostración no acreditan seguridad ni persistencia real.
+Usuario: Inicio, Entrenamiento, Análisis y Configuración; perfil desde la cuenta. Administrador: resumen global, Usuarios, Entrenamientos, Ejercicios y Configuración; cuenta propia desde el mismo menú. La interfaz administrativa no ejecuta el modelo. El usuario de demostración no accede a operaciones administrativas del adaptador local. Los datos de demostración no acreditan seguridad ni persistencia real.
 
 ## Inicio del usuario
 
@@ -203,7 +213,7 @@ La eliminación de una sesión revierte sus registros en una transacción y actu
 
 ## Preferencias de interfaz
 
-Tema (`oscuro`, `claro`, `sistema`) y animaciones se guardan en `localStorage`, separados por ID de cuenta y modo API/demo. No requieren nuevos endpoints ni se sincronizan entre dispositivos. No almacenan roles ni secretos. El tema predeterminado es azul noche. La preferencia de reducir movimiento del dispositivo tiene prioridad sobre activar animaciones en la plataforma.
+Tema (`oscuro`, `claro`, `sistema`) y animaciones se guardan en `localStorage`, separados por ID de cuenta y modo API/demo. No requieren nuevos endpoints ni se sincronizan entre dispositivos. No almacenan roles ni secretos. La paleta utiliza negro, gris y blanco. La preferencia de reducir movimiento del dispositivo tiene prioridad sobre activar animaciones en la plataforma.
 
 ## Errores y despliegue
 
