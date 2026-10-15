@@ -38,6 +38,8 @@ test('el frontend registra perfil y sesiones reales y consulta una predicción p
   await page.getByLabel('Carga (kg)', { exact: true }).fill('40');
   await page.getByRole('button', { name: 'Guardar sesión' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Sesión guardada' })).toBeVisible();
+  await page.getByText('Ver ejercicios (1)', { exact: true }).click();
+  await expect(page.locator('.session-exercises li').filter({ hasText: '3 series × 8 rep. × 40 kg' })).toBeVisible();
   const tokenResponse = await request.post('http://localhost:8000/auth/login', { data: { correo: email, clave: password } });
   const { access_token } = await tokenResponse.json();
   const headers = { Authorization: 'Bearer ' + access_token };
@@ -50,9 +52,9 @@ test('el frontend registra perfil y sesiones reales y consulta una predicción p
   }
   await nav(page, 'Inicio');
   await expect(page.locator('.calendar-trained')).not.toHaveCount(0);
-  await nav(page, 'Análisis IA');
+  await nav(page, 'Análisis');
   await page.getByLabel('Ejercicio para analizar').selectOption('1');
-  await page.getByText('3. Definir o revisar una meta', { exact: true }).click();
+  await page.getByText('Definir o revisar una meta', { exact: true }).click();
   await page.getByLabel('Carga objetivo (kg)').fill('50');
   const [savedGoal] = await Promise.all([
     page.waitForResponse(response => response.url().endsWith('/metas') && response.request().method() === 'POST'),
@@ -61,7 +63,18 @@ test('el frontend registra perfil y sesiones reales y consulta una predicción p
   expect(savedGoal.status()).toBe(201);
   const goal = await savedGoal.json();
   await expect(page.getByLabel('Meta del análisis')).toHaveValue(String(goal.id));
-  await page.getByRole('button', { name: 'Analizar mi progreso', exact: true }).click();
+  expect(goal.repeticiones_objetivo).toBe(8);
+  await expect(page.getByLabel('Repeticiones comparadas')).toBeDisabled();
+  const [analysisResponse] = await Promise.all([
+    page.waitForResponse(response => response.url().endsWith('/analisis') && response.request().method() === 'POST'),
+    page.getByRole('button', { name: 'Analizar mi progreso', exact: true }).click(),
+  ]);
+  expect(analysisResponse.status()).toBe(200);
+  const analysis = await analysisResponse.json();
+  expect(analysis.modelo_version).toBe('lineal_comparable_v2');
+  expect(analysis.repeticiones_analizadas).toBe(8);
+  expect(analysis.error_mae_kg).toBe(0);
+  expect(analysis.validaciones_temporales).toBe(3);
   await expect(page.getByRole('heading', { name: 'Tu tendencia de carga' })).toBeVisible();
   await expect(page.getByText('42 kg', { exact: true })).toBeVisible();
   await page.reload();
