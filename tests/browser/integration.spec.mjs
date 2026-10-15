@@ -1,7 +1,8 @@
 import { test, expect } from '@playwright/test';
 async function nav(page, name) {
-  const button = page.getByRole('button', { name: 'Abrir menú', exact: true });
-  if (await button.isVisible()) await button.click();
+  const button = page.locator('.topbar button[aria-controls="sidebar-navigation"]');
+  await expect(button).toBeVisible();
+  if (await button.getAttribute('aria-label') === 'Abrir menú') await button.click();
   await page.getByRole('navigation', { name: 'Navegación principal' }).getByRole('link', { name, exact: true }).click();
 }
 async function login(page, email, password) {

@@ -101,7 +101,7 @@ pytest -q
 
 Sin TEST_DATABASE_URL se ejecutan las pruebas unitarias y se omiten las de integración. Para ejecutar todas utiliza una **base de pruebas cuyo nombre termine en _test**, aplica migraciones sobre ella y configura TEST_DATABASE_URL. Las pruebas borran únicamente las tablas del esquema gym_app de esa base.
 
-GitHub Actions crea PostgreSQL 16, ejecuta todas las pruebas, verifica Alembic, revierte y reaplica las migraciones y prueba el frontend real en escritorio y móvil. El frontend está fijado al commit 8625b39400c46a01380fe7dee7606d88168a1e1a; actualizarlo requiere revisar el contrato.
+GitHub Actions crea PostgreSQL 16, ejecuta todas las pruebas, verifica Alembic, revierte y reaplica las migraciones y prueba el frontend real en escritorio y móvil. El frontend está fijado al commit ac9a045daadad8ab12053150e7f6896d7b8618f9; actualizarlo requiere revisar el contrato.
 
 Incluye aislamiento de cuentas, roles revocados, sesiones atómicas, catálogo inactivo, análisis guardado, correos duplicados y dos cambios de rol simultáneos. Las pruebas de navegador no interceptan las respuestas del backend.
 
