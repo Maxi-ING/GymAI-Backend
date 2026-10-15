@@ -88,6 +88,8 @@ def test_prediction_and_stored_overview(client, member):
     )
     assert result.status_code == 200, result.text
     assert result.json()["siguiente_carga_kg"] == 48
+    assert result.json()["modelo_version"] == "lineal_comparable_v2"
+    assert result.json()["repeticiones_analizadas"] == 8
     overview = client.get("/inicio", headers=member).json()
     assert overview["ultimo_analisis"]["resultado"] == result.json()
     assert overview["rendimiento"][0]["sesiones"] == 8
@@ -98,6 +100,71 @@ def test_prediction_and_stored_overview(client, member):
         ).status_code
         == 404
     )
+
+
+def test_goals_and_predictions_respect_repetitions(client, member):
+    for i in range(4):
+        client.post(
+            "/sesiones",
+            headers=member,
+            json=session_payload(30 + i * 2, business_today() - timedelta(weeks=3 - i)),
+        )
+    heavier = session_payload(100)
+    heavier["registros"][0]["repeticiones"] = 3
+    client.post("/sesiones", headers=member, json=heavier)
+    response = client.post(
+        "/metas",
+        headers=member,
+        json={"ejercicio_id": 1, "carga_objetivo_kg": 40, "repeticiones_objetivo": 8},
+    )
+    assert response.status_code == 201
+    goal = response.json()
+    assert goal["estado"] == "pendiente" and goal["repeticiones_objetivo"] == 8
+    assert client.get("/metas", headers=member).json()[0]["estado"] == "pendiente"
+    overview = client.get("/inicio", headers=member).json()["metas"][0]
+    assert overview["ultima_carga_kg"] == 36 and overview["avance_porcentaje"] == 90
+    result = client.post(
+        "/analisis",
+        headers=member,
+        json={"ejercicio_id": 1, "meta_id": goal["id"], "repeticiones": 8},
+    )
+    assert result.status_code == 200 and result.json()["siguiente_carga_kg"] == 38
+    assert (
+        client.post(
+            "/analisis",
+            headers=member,
+            json={"ejercicio_id": 1, "meta_id": goal["id"], "repeticiones": 3},
+        ).status_code
+        == 422
+    )
+
+
+def test_inactive_exercise_keeps_its_name_in_history(client, member, admin):
+    record = client.post("/sesiones", headers=member, json=session_payload()).json()["registros"][0]
+    name = record["ejercicio_nombre"]
+    assert name
+    assert (
+        client.patch("/admin/ejercicios/1", headers=admin, json={"activo": False}).status_code
+        == 200
+    )
+    assert (
+        client.get("/sesiones", headers=member).json()[0]["registros"][0]["ejercicio_nombre"]
+        == name
+    )
+    assert client.post("/sesiones", headers=member, json=session_payload()).status_code == 422
+
+
+def test_old_history_does_not_get_a_current_forecast(client, member):
+    for i in range(4):
+        client.post(
+            "/sesiones",
+            headers=member,
+            json=session_payload(30 + i * 2, business_today() - timedelta(weeks=10 - i)),
+        )
+    result = client.post(
+        "/analisis", headers=member, json={"ejercicio_id": 1, "repeticiones": 8}
+    ).json()
+    assert result["estado"] == "no_estimable" and result["proyeccion"] == []
 
 
 def test_administration_and_revocation(client, member, admin):

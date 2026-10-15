@@ -5,7 +5,7 @@ from app.core.database import SessionFactory
 
 def test_private_schema_has_rls_and_no_public_schema_access(client):
     with SessionFactory() as db:
-        assert db.scalar(text("SELECT version_num FROM gym_app.alembic_version")) == "0003"
+        assert db.scalar(text("SELECT version_num FROM gym_app.alembic_version")) == "0004"
         assert (
             db.scalar(
                 text("SELECT count(*) FROM pg_tables WHERE schemaname='gym_app' AND rowsecurity")

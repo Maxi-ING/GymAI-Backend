@@ -84,16 +84,29 @@ class DashboardService:
         performance = self._performance(sessions)
         latest = {row["ejercicio_id"]: row["ultima_carga_kg"] for row in performance}
         best = {row["ejercicio_id"]: Decimal(str(row["mejor_carga_kg"])) for row in performance}
+        comparable_best, comparable_latest = {}, {}
+        for session in sessions:
+            maxima = {}
+            for row in session.registros:
+                key = (row.ejercicio_id, row.repeticiones)
+                comparable_best[key] = max(comparable_best.get(key, Decimal(0)), row.carga_kg)
+                maxima[key] = max(maxima.get(key, Decimal(0)), row.carga_kg)
+            comparable_latest.update(maxima)
         goals = []
         for item in PredictionRepository(self.repository.db).goals(user.id):
             load = latest.get(item.ejercicio_id)
+            maximum = best.get(item.ejercicio_id)
+            if item.repeticiones_objetivo is not None:
+                key = (item.ejercicio_id, item.repeticiones_objetivo)
+                load = comparable_latest.get(key)
+                maximum = comparable_best.get(key)
             goals.append(
                 {
-                    **goal_summary(item, best.get(item.ejercicio_id)),
+                    **goal_summary(item, maximum),
                     "ejercicio_nombre": item.ejercicio.nombre,
                     "ultima_carga_kg": load,
                     "avance_porcentaje": min(
-                        100, round(load / float(item.carga_objetivo_kg) * 100, 2)
+                        100, round(float(load) / float(item.carga_objetivo_kg) * 100, 2)
                     )
                     if load is not None
                     else None,
