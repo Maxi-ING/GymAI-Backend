@@ -93,7 +93,7 @@ class PredictorLineal(PredictorCarga):
             )
         last = int(x[-1, 0])
         fitted = float(model.predict([[last]])[0])
-        eta = (meta - fitted) / slope if meta is not None else None
+        eta = round((meta - fitted) / slope, 8) if meta is not None else None
         if eta is not None and (not math.isfinite(eta) or eta <= 0 or eta > MAX_WEEKS):
             return result(
                 "no_estimable",
