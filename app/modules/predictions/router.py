@@ -16,7 +16,7 @@ def service(db):
 @router.get("/metas", response_model=list[GoalOut])
 def goals(db: DB, user: CurrentUser):
     svc = service(db)
-    return [svc.goal_result(item) for item in svc.repository.goals(user.id)]
+    return svc.goals(user.id)
 
 
 @router.post("/metas", response_model=GoalOut, status_code=201)

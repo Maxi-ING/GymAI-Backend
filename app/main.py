@@ -17,7 +17,7 @@ from app.modules.users.router import router as users_router
 settings = get_settings()
 app = FastAPI(
     title="FitAnalytics AI",
-    version="0.1.0",
+    version="0.2.0",
     description="API del gimnasio. Login JSON; pega el token Bearer en Authorize.",
 )
 app.add_middleware(

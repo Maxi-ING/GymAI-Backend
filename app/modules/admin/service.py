@@ -38,7 +38,7 @@ class AdminService:
             "usuario": user,
             "progreso": DashboardService(DashboardRepository(self.db)).progress(user_id),
             "sesiones": self.repository.sessions(user_id)["items"],
-            "metas": [goals.goal_result(item) for item in goals.repository.goals(user_id)],
+            "metas": goals.goals(user_id),
         }
 
     def create_user(self, actor, data):
