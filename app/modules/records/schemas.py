@@ -20,6 +20,7 @@ class SessionInput(Input):
 
 class RecordOut(Output):
     ejercicio_id: int
+    ejercicio_nombre: str
     series: int
     repeticiones: int
     carga_kg: float

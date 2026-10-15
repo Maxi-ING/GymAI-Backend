@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.modules.predictions.models import Analisis, Meta
@@ -30,10 +30,20 @@ class PredictionRepository:
     def rows(self, user_id, exercise_id):
         return list(
             self.db.execute(
-                select(Sesion.fecha, Registro.carga_kg)
+                select(Sesion.fecha, Registro.carga_kg, Registro.repeticiones)
                 .join(Registro, Registro.sesion_id == Sesion.id)
                 .where(Sesion.usuario_id == user_id, Registro.ejercicio_id == exercise_id)
                 .order_by(Sesion.fecha, Sesion.id)
+            )
+        )
+
+    def maxima(self, user_id):
+        return list(
+            self.db.execute(
+                select(Registro.ejercicio_id, Registro.repeticiones, func.max(Registro.carga_kg))
+                .join(Sesion, Sesion.id == Registro.sesion_id)
+                .where(Sesion.usuario_id == user_id)
+                .group_by(Registro.ejercicio_id, Registro.repeticiones)
             )
         )
 

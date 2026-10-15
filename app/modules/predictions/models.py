@@ -13,6 +13,10 @@ class Meta(Base):
     __tablename__ = "metas"
     __table_args__ = (
         CheckConstraint("carga_objetivo_kg > 0 AND carga_objetivo_kg <= 600", name="carga"),
+        CheckConstraint(
+            "repeticiones_objetivo IS NULL OR repeticiones_objetivo BETWEEN 1 AND 100",
+            name="repeticiones",
+        ),
         Index("ix_metas_usuario_ejercicio", "usuario_id", "ejercicio_id"),
         Index("ix_metas_ejercicio_id", "ejercicio_id"),
     )
@@ -20,6 +24,7 @@ class Meta(Base):
     usuario_id: Mapped[int] = mapped_column(ForeignKey("gym_app.usuarios.id"))
     ejercicio_id: Mapped[int] = mapped_column(ForeignKey("gym_app.ejercicios.id"))
     carga_objetivo_kg: Mapped[Decimal] = mapped_column(Numeric(4, 1))
+    repeticiones_objetivo: Mapped[int | None]
     ejercicio: Mapped[Ejercicio] = relationship(lazy="joined")
 
 

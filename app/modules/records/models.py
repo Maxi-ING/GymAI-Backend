@@ -51,6 +51,11 @@ class Registro(Base):
     series: Mapped[int]
     repeticiones: Mapped[int]
     carga_kg: Mapped[Decimal] = mapped_column(Numeric(4, 1))
+    ejercicio: Mapped[Ejercicio] = relationship(lazy="joined")
+
+    @property
+    def ejercicio_nombre(self):
+        return self.ejercicio.nombre
 
     def dominio(self):
         return RegistroEjercicio(self.series, self.repeticiones, self.carga_kg)

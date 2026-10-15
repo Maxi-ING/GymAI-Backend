@@ -6,7 +6,7 @@ from pydantic import ValidationError
 
 from app.core.domain import MedicionCorporal, RegistroEjercicio, SesionEntrenamiento
 from app.ml.predictor import PredictorCarga, PredictorLineal
-from app.ml.preprocessing import weekly_loads
+from app.ml.preprocessing import comparable_loads, weekly_loads
 from app.modules.predictions.schemas import AnalysisInput, Prediction
 from app.modules.predictions.service import PredictionService
 from app.modules.records.schemas import SessionInput
@@ -85,7 +85,54 @@ def test_prediction_known_example_and_no_goal():
     assert result.siguiente_carga_kg == 48
     assert result.semanas_hasta_meta == 2
     assert result.pendiente_kg_semana == 2
+    assert result.error_mae_kg == 0
+    assert result.error_referencia_kg == 2
+    assert result.validaciones_temporales == 6
     assert PredictorLineal().predecir(points).semanas_hasta_meta is None
+
+
+def test_repetition_groups_do_not_mix_heavier_low_rep_records():
+    rows = [(date(2026, 1, 1 + i * 7), Decimal(30 + i * 2), 8) for i in range(4)]
+    rows.append((date(2026, 1, 22), Decimal(100), 3))
+    history, reps = comparable_loads(rows, 8)
+    assert reps == 8 and [p["carga_kg"] for p in history] == [30, 32, 34, 36]
+    assert comparable_loads(rows)[1] == 8
+    assert comparable_loads(rows, 10) == ([], 10)
+
+
+@pytest.mark.parametrize(
+    "loads, weeks, target",
+    [
+        ([40, 40.1, 40, 40.1], [0, 1, 2, 3], 100),
+        ([550, 560, 570, 580], [0, 1, 2, 3], None),
+        ([30, 32, 34, 36], [0, 1, 2, 3], 100),
+        ([30, 40, 30, 40], [0, 1, 2, 3], None),
+        ([30, 32, 34, 36], [0, 1, 10, 11], None),
+    ],
+)
+def test_unreliable_results_never_publish_a_curve_or_eta(loads, weeks, target):
+    result = PredictorLineal().predecir(
+        [{"semana": week, "carga_kg": load} for week, load in zip(weeks, loads, strict=True)],
+        target,
+    )
+    assert result.estado == "no_estimable"
+    assert result.proyeccion == []
+    assert result.siguiente_carga_kg is None and result.semanas_hasta_meta is None
+
+
+def test_temporal_error_uses_only_the_past():
+    result = PredictorLineal().predecir(
+        [{"semana": i, "carga_kg": load} for i, load in enumerate([30, 32, 34, 60])]
+    )
+    # Tercera semana: 34 (error 0); cuarta: 36 (error 24). El último punto no entra en su propio ajuste.
+    assert result.error_mae_kg == 12
+    assert result.error_referencia_kg == 14
+    assert result.validaciones_temporales == 2 and result.estado == "no_estimable"
+
+
+def test_old_analysis_json_still_loads_without_claiming_a_new_model_version():
+    old = Prediction(estado="historial_insuficiente", mensaje="Anterior", semanas_observadas=0)
+    assert old.modelo_version is None and old.repeticiones_analizadas is None
 
 
 @pytest.mark.parametrize(
