@@ -1,14 +1,22 @@
+from __future__ import annotations
+
 from datetime import timedelta
+from decimal import Decimal
 
 from fastapi import HTTPException
 
+from app.core.contracts import GoalData
 from app.core.validation import business_today
 from app.ml.predictor import PredictorCarga
 from app.ml.preprocessing import comparable_loads
+from app.modules.predictions.models import Meta
 from app.modules.predictions.repository import PredictionRepository
+from app.modules.predictions.schemas import AnalysisInput, GoalInput, Prediction
+from app.modules.users.models import Usuario
 
 
-def goal_summary(item, maximum):
+def goal_summary(item: Meta, maximum: Decimal | None) -> GoalData:
+    """Deriva el estado de una meta desde la máxima carga comparable."""
     return {
         "id": item.id,
         "ejercicio_id": item.ejercicio_id,
@@ -21,11 +29,15 @@ def goal_summary(item, maximum):
 
 
 class PredictionService:
-    def __init__(self, repository: PredictionRepository, predictor: PredictorCarga):
+    """Coordina las metas y el análisis bajo solicitud del usuario."""
+
+    def __init__(self, repository: PredictionRepository, predictor: PredictorCarga) -> None:
+        """Recibe persistencia y contrato predictivo como colaboradores sustituibles."""
         self.repository = repository
         self.predictor = predictor
 
-    def goal_result(self, item):
+    def goal_result(self, item: Meta) -> GoalData:
+        """Compara la meta con su historial y respeta las repeticiones objetivo."""
         rows = self.repository.rows(item.usuario_id, item.ejercicio_id)
         return goal_summary(
             item,
@@ -40,7 +52,8 @@ class PredictionService:
             ),
         )
 
-    def goals(self, user_id):
+    def goals(self, user_id: int) -> list[GoalData]:
+        """Resume las metas usando máximos agrupados para evitar consultas por cada meta."""
         items = self.repository.goals(user_id)
         maxima = self.repository.maxima(user_id) if items else []
         return [
@@ -61,12 +74,14 @@ class PredictionService:
             for item in items
         ]
 
-    def create_goal(self, user, data):
+    def create_goal(self, user: Usuario, data: GoalInput) -> GoalData:
+        """Valida el ejercicio activo, guarda la meta y devuelve su estado actual."""
         if not self.repository.exercise(data.ejercicio_id, active=True):
             raise HTTPException(422, "El ejercicio no existe o está inactivo.")
         return self.goal_result(self.repository.add_goal(user.id, data))
 
-    def analyze(self, user, data):
+    def analyze(self, user: Usuario, data: AnalysisInput) -> Prediction:
+        """Valida permisos y grupo comparable; predice, comprueba actualidad y guarda el resultado."""
         if user.rol == "admin":
             raise HTTPException(403, "La administración no ejecuta el modelo.")
         if not self.repository.exercise(data.ejercicio_id):

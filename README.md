@@ -79,6 +79,7 @@ GitHub Actions verifica reglas, permisos, transacciones, migraciones y recorrido
 
 La API se aloja en **Render**, PostgreSQL en **Supabase** y el frontend en **Vercel**. Solo el backend se conecta directamente con la base de datos.
 
+- [Convenciones y recorrido de una sesión](docs/convenciones.md).
 - [Contrato de la API](docs/api-contract.md).
 - [Base de datos y demostración](docs/base-datos.md).
 - [Configuración del despliegue](docs/despliegue.md).
