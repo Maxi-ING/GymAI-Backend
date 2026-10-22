@@ -11,7 +11,13 @@ from app.ml.predictor import PredictorCarga
 from app.ml.preprocessing import comparable_loads
 from app.modules.predictions.models import Meta
 from app.modules.predictions.repository import PredictionRepository
-from app.modules.predictions.schemas import AnalysisInput, GoalInput, Prediction
+from app.modules.predictions.schemas import (
+    AnalysisAvailability,
+    AnalysisInput,
+    ComparableGroup,
+    GoalInput,
+    Prediction,
+)
 from app.modules.users.models import Usuario
 
 
@@ -79,6 +85,34 @@ class PredictionService:
         if not self.repository.exercise(data.ejercicio_id, active=True):
             raise HTTPException(422, "El ejercicio no existe o está inactivo.")
         return self.goal_result(self.repository.add_goal(user.id, data))
+
+    def availability(self, user: Usuario, exercise_id: int) -> AnalysisAvailability:
+        """Resume los grupos reales usando el mismo criterio semanal que el predictor.
+
+        Contar cuatro semanas no certifica la calidad de la futura estimación.
+        Esta consulta no ejecuta ni guarda un análisis.
+        """
+        if user.rol == "admin":
+            raise HTTPException(403, "La administración no ejecuta el modelo.")
+        if not self.repository.exercise(exercise_id):
+            raise HTTPException(404, "Ejercicio no disponible.")
+        rows = self.repository.rows(user.id, exercise_id)
+        groups = []
+        for repetitions in {row.repeticiones for row in rows}:
+            matching = [row for row in rows if row.repeticiones == repetitions]
+            history, _ = comparable_loads(matching, repetitions)
+            groups.append(
+                ComparableGroup(
+                    repeticiones=repetitions,
+                    registros=len(matching),
+                    semanas=len(history),
+                    ultima_fecha=max(row.fecha for row in matching),
+                )
+            )
+        groups.sort(
+            key=lambda group: (-group.semanas, -group.ultima_fecha.toordinal(), group.repeticiones)
+        )
+        return AnalysisAvailability(ejercicio_id=exercise_id, grupos=groups)
 
     def analyze(self, user: Usuario, data: AnalysisInput) -> Prediction:
         """Valida permisos y grupo comparable; predice, comprueba actualidad y guarda el resultado."""

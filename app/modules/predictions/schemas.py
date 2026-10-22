@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Annotated, Literal
 
 from pydantic import Field
@@ -25,6 +26,19 @@ class AnalysisInput(Input):
     ejercicio_id: PositiveId
     meta_id: PositiveId | None = None
     repeticiones: Repetitions | None = None
+
+
+class ComparableGroup(Output):
+    repeticiones: int
+    registros: int
+    semanas: int
+    ultima_fecha: date
+
+
+class AnalysisAvailability(Output):
+    ejercicio_id: int
+    minimo_semanas: int = 4
+    grupos: list[ComparableGroup]
 
 
 class PredictionPoint(Output):
