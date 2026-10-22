@@ -55,6 +55,8 @@ test('el frontend registra perfil y sesiones reales y consulta una predicción p
   await expect(page.locator('.calendar-trained')).not.toHaveCount(0);
   await nav(page, 'Análisis');
   await page.getByLabel('Ejercicio para analizar').selectOption('1');
+  await expect(page.getByLabel('Repeticiones comparadas')).toHaveValue('8');
+  await expect(page.getByText('5 semanas comparables disponibles', { exact: true })).toBeVisible();
   await page.getByText('Definir o revisar una meta', { exact: true }).click();
   await page.getByLabel('Carga objetivo (kg)').fill('50');
   const [savedGoal] = await Promise.all([
@@ -76,7 +78,7 @@ test('el frontend registra perfil y sesiones reales y consulta una predicción p
   expect(analysis.repeticiones_analizadas).toBe(8);
   expect(analysis.error_mae_kg).toBe(0);
   expect(analysis.validaciones_temporales).toBe(3);
-  await expect(page.getByRole('heading', { name: 'Tu tendencia de carga' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '2. Historial y predicción disponible' })).toBeVisible();
   await expect(page.getByText('42 kg', { exact: true })).toBeVisible();
   await page.reload();
   await nav(page, 'Inicio');
