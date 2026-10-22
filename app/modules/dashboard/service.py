@@ -1,18 +1,40 @@
+from __future__ import annotations
+
 from collections import defaultdict
+from datetime import date
 from decimal import Decimal
 
 from fastapi import HTTPException
 
+from app.core.contracts import (
+    GoalProgress,
+    OverviewData,
+    PerformanceData,
+    ProgressData,
+    RecommendationData,
+)
 from app.modules.dashboard.repository import DashboardRepository
 from app.modules.predictions.repository import PredictionRepository
 from app.modules.predictions.service import goal_summary
+from app.modules.records.models import Sesion
+from app.modules.users.models import Usuario
 
 
 class DashboardService:
-    def __init__(self, repository: DashboardRepository):
+    """Calcula los resúmenes de progreso y rendimiento del usuario."""
+
+    def __init__(self, repository: DashboardRepository) -> None:
+        """Recibe las consultas del panel para la solicitud actual."""
         self.repository = repository
 
-    def progress(self, user_id, exercise_id=None, desde=None, hasta=None):
+    def progress(
+        self,
+        user_id: int,
+        exercise_id: int | None = None,
+        desde: date | None = None,
+        hasta: date | None = None,
+    ) -> ProgressData:
+        """Valida filtros y calcula indicadores de las sesiones de la cuenta."""
         if desde and hasta and desde > hasta:
             raise HTTPException(422, "La fecha inicial debe ser anterior o igual a la final.")
         if exercise_id is not None and not PredictionRepository(self.repository.db).exercise(
@@ -22,7 +44,10 @@ class DashboardService:
         sessions = self.repository.records.sessions(user_id, desde, hasta)
         return self._progress(user_id, sessions, exercise_id)
 
-    def _progress(self, user_id, sessions, exercise_id=None):
+    def _progress(
+        self, user_id: int, sessions: list[Sesion], exercise_id: int | None = None
+    ) -> ProgressData:
+        """Resume volumen, carga máxima y puntos por fecha a partir del historial recibido."""
         points = {}
         count, volume, max_load = 0, Decimal(0), None
         for session in sessions:
@@ -50,10 +75,12 @@ class DashboardService:
             "puntos": list(points.values()),
         }
 
-    def performance(self, user_id):
+    def performance(self, user_id: int) -> list[PerformanceData]:
+        """Calcula el rendimiento descriptivo por ejercicio de una cuenta."""
         return self._performance(self.repository.records.sessions(user_id))
 
-    def _performance(self, sessions):
+    def _performance(self, sessions: list[Sesion]) -> list[PerformanceData]:
+        """Compara máximos por sesión y conserva nombres de ejercicios desactivados."""
         grouped = defaultdict(list)
         for session in sessions:
             maximums = {}
@@ -79,7 +106,8 @@ class DashboardService:
             for exercise_id, loads in sorted(grouped.items())
         ]
 
-    def overview(self, user):
+    def overview(self, user: Usuario) -> OverviewData:
+        """Reúne progreso, metas y recomendaciones sin volver a entrenar el predictor."""
         sessions = self.repository.records.sessions(user.id)
         performance = self._performance(sessions)
         latest = {row["ejercicio_id"]: row["ultima_carga_kg"] for row in performance}
@@ -92,7 +120,7 @@ class DashboardService:
                 comparable_best[key] = max(comparable_best.get(key, Decimal(0)), row.carga_kg)
                 maxima[key] = max(maxima.get(key, Decimal(0)), row.carga_kg)
             comparable_latest.update(maxima)
-        goals = []
+        goals: list[GoalProgress] = []
         for item in PredictionRepository(self.repository.db).goals(user.id):
             load = latest.get(item.ejercicio_id)
             maximum = best.get(item.ejercicio_id)
@@ -113,7 +141,7 @@ class DashboardService:
                 }
             )
         last = self.repository.last_analysis(user.id)
-        recommendations = [
+        recommendations: list[RecommendationData] = [
             {
                 "titulo": "Mantén un historial completo",
                 "mensaje": f"Tu objetivo es {user.objetivo or 'definir tu objetivo'}. Registra sesiones reales con series, repeticiones y carga para comparar el mismo ejercicio.",

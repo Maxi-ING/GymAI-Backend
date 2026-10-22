@@ -1,22 +1,35 @@
+from __future__ import annotations
+
+from typing import Literal
+
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.sql.elements import ColumnElement
 
+from app.core.contracts import AdminSessionData, Page
+from app.core.database import Base
 from app.modules.admin.models import Auditoria
 from app.modules.records.models import Sesion
 from app.modules.users.models import Usuario
+from app.modules.users.schemas import Role
 
 ADMIN_LOCK = 73519001
 
 
 class AdminRepository:
-    def __init__(self, db: Session):
+    """Consulta datos globales y registra auditoría administrativa."""
+
+    def __init__(self, db: Session) -> None:
+        """Comparte la transacción de la operación administrativa."""
         self.db = db
 
-    def lock_roles(self):
+    def lock_roles(self) -> None:
+        """Serializa cambios de acceso para conservar al menos un administrador activo."""
         # Todos los cambios de permisos serializan la comprobación del último admin.
         self.db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": ADMIN_LOCK})
 
-    def user(self, user_id, locked=False):
+    def user(self, user_id: int, locked: bool = False) -> Usuario | None:
+        """Obtiene una cuenta y permite bloquearla durante una modificación."""
         query = (
             select(Usuario).where(Usuario.id == user_id).execution_options(populate_existing=True)
         )
@@ -24,14 +37,22 @@ class AdminRepository:
             query = query.with_for_update()
         return self.db.scalar(query)
 
-    def active_admins(self):
+    def active_admins(self) -> int:
+        """Cuenta los administradores activos de la plataforma."""
         return self.db.scalar(
             select(func.count())
             .select_from(Usuario)
             .where(Usuario.rol == "admin", Usuario.activo.is_(True))
         )
 
-    def users(self, q="", rol=None, estado=None, pagina=1):
+    def users(
+        self,
+        q: str = "",
+        rol: Role | None = None,
+        estado: Literal["activo", "inactivo"] | None = None,
+        pagina: int = 1,
+    ) -> Page[Usuario]:
+        """Lista usuarios con filtros parametrizados y paginación de diez elementos."""
         query = select(Usuario)
         if q:
             escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
@@ -49,7 +70,10 @@ class AdminRepository:
         )
         return {"items": items, "total": total, "pagina": pagina, "por_pagina": 10}
 
-    def sessions(self, user_id=None, pagina=1, limit=10):
+    def sessions(
+        self, user_id: int | None = None, pagina: int = 1, limit: int = 10
+    ) -> Page[AdminSessionData]:
+        """Lista sesiones con propietario y detalle, globales o de una cuenta."""
         query = (
             select(Sesion, Usuario.nombre)
             .join(Usuario, Usuario.id == Sesion.usuario_id)
@@ -76,10 +100,19 @@ class AdminRepository:
         ]
         return {"items": items, "total": total, "pagina": pagina, "por_pagina": limit}
 
-    def count(self, model, *conditions):
+    def count(self, model: type[Base], *conditions: ColumnElement[bool]) -> int:
+        """Cuenta filas que satisfacen las condiciones SQLAlchemy recibidas."""
         return self.db.scalar(select(func.count()).select_from(model).where(*conditions))
 
-    def audit(self, actor, action, resource, resource_id, detail=None):
+    def audit(
+        self,
+        actor: Usuario,
+        action: str,
+        resource: str,
+        resource_id: int,
+        detail: dict[str, object] | None = None,
+    ) -> None:
+        """Registra el cambio administrativo en la misma transacción, sin credenciales."""
         self.db.add(
             Auditoria(
                 actor_id=actor.id,

@@ -1,9 +1,13 @@
+from __future__ import annotations
+
 from fastapi import HTTPException
 from sqlalchemy import select
 
+from app.core.contracts import AdminDetailData, AdminSummaryData
 from app.core.security import hash_password
 from app.ml.predictor import PredictorLineal
 from app.modules.admin.repository import AdminRepository
+from app.modules.admin.schemas import AdminCreate, AdminUpdate, ExerciseCreate, ExerciseUpdate
 from app.modules.dashboard.repository import DashboardRepository
 from app.modules.dashboard.service import DashboardService
 from app.modules.predictions.models import Meta
@@ -15,11 +19,15 @@ from app.modules.users.repository import UserRepository
 
 
 class AdminService:
-    def __init__(self, repository: AdminRepository):
+    """Aplica las reglas de gestión global y protección de las cuentas."""
+
+    def __init__(self, repository: AdminRepository) -> None:
+        """Recibe el repositorio y su transacción administrativa."""
         self.repository = repository
         self.db = repository.db
 
-    def summary(self):
+    def summary(self) -> AdminSummaryData:
+        """Resume cuentas, sesiones y catálogo para el panel administrativo."""
         repo = self.repository
         return {
             "total_usuarios": repo.count(Usuario),
@@ -29,7 +37,8 @@ class AdminService:
             "sesiones_recientes": repo.sessions(limit=5)["items"],
         }
 
-    def detail(self, user_id):
+    def detail(self, user_id: int) -> AdminDetailData:
+        """Consulta perfil, progreso, sesiones y metas; devuelve 404 si no existe la cuenta."""
         user = self.repository.user(user_id)
         if user is None:
             raise HTTPException(404, "Usuario no disponible.")
@@ -41,7 +50,8 @@ class AdminService:
             "metas": goals.goals(user_id),
         }
 
-    def create_user(self, actor, data):
+    def create_user(self, actor: Usuario, data: AdminCreate) -> Usuario:
+        """Crea una cuenta con el rol solicitado y registra al administrador responsable."""
         self.repository.lock_roles()
         users = UserRepository(self.db)
         if users.by_email(data.correo):
@@ -55,7 +65,8 @@ class AdminService:
         self.repository.audit(actor, "crear_usuario", "usuario", user.id, {"rol": data.rol})
         return user
 
-    def update_user(self, actor, user_id, data):
+    def update_user(self, actor: Usuario, user_id: int, data: AdminUpdate) -> Usuario:
+        """Actualiza una cuenta protegiendo el propio acceso y al último administrador activo."""
         self.repository.lock_roles()
         user = self.repository.user(user_id, locked=True)
         if user is None:
@@ -77,7 +88,8 @@ class AdminService:
         self.repository.audit(actor, "actualizar_usuario", "usuario", user.id, values)
         return user
 
-    def delete_session(self, actor, session_id):
+    def delete_session(self, actor: Usuario, session_id: int) -> None:
+        """Elimina la sesión con sus registros y conserva la acción en auditoría."""
         item = self.db.scalar(select(Sesion).where(Sesion.id == session_id).with_for_update())
         if item is None:
             raise HTTPException(404, "Sesión no disponible.")
@@ -89,14 +101,16 @@ class AdminService:
         self.db.delete(item)
         self.repository.audit(actor, "eliminar_sesion", "sesion", session_id, detail)
 
-    def delete_goal(self, actor, goal_id):
+    def delete_goal(self, actor: Usuario, goal_id: int) -> None:
+        """Elimina la meta y audita la acción; los análisis históricos se conservan."""
         item = self.db.get(Meta, goal_id)
         if item is None:
             raise HTTPException(404, "Meta no disponible.")
         self.db.delete(item)
         self.repository.audit(actor, "eliminar_meta", "meta", goal_id)
 
-    def create_exercise(self, actor, data):
+    def create_exercise(self, actor: Usuario, data: ExerciseCreate) -> Ejercicio:
+        """Inserta el ejercicio normalizado y registra la creación en auditoría."""
         item = Ejercicio(
             nombre=data.nombre, nombre_normalizado=data.nombre.casefold(), unidad=data.unidad
         )
@@ -105,7 +119,8 @@ class AdminService:
         self.repository.audit(actor, "crear_ejercicio", "ejercicio", item.id)
         return item
 
-    def update_exercise(self, actor, exercise_id, data):
+    def update_exercise(self, actor: Usuario, exercise_id: int, data: ExerciseUpdate) -> Ejercicio:
+        """Actualiza o desactiva el catálogo sin eliminar su historial y audita el cambio."""
         item = self.db.scalar(
             select(Ejercicio).where(Ejercicio.id == exercise_id).with_for_update()
         )

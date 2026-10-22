@@ -316,3 +316,41 @@ def test_overview_reuses_history_and_preserves_achieved_goals(client, member):
     assert data["metas"][0]["avance_porcentaje"] == 88.89
     assert sum("FROM gym_app.sesiones" in q for q in queries) == 1
     assert sum("FROM gym_app.registros" in q for q in queries) == 1
+
+
+def test_analysis_availability_counts_comparable_weeks_and_respects_owner(client, member, admin):
+    url = "/analisis/disponibilidad?ejercicio_id=1"
+    assert client.get(url).status_code == 401
+    assert client.get(url, headers=admin).status_code == 403
+    assert client.get("/analisis/disponibilidad?ejercicio_id=0", headers=member).status_code == 422
+    assert (
+        client.get("/analisis/disponibilidad?ejercicio_id=999", headers=member).status_code == 404
+    )
+    assert client.get(url, headers=member).json()["grupos"] == []
+    for weeks, repetitions in [(3, 10), (3, 10), (2, 10), (1, 10), (0, 10), (0, 8)]:
+        payload = session_payload(40, business_today() - timedelta(weeks=weeks))
+        payload["registros"][0]["repeticiones"] = repetitions
+        assert client.post("/sesiones", headers=member, json=payload).status_code == 201
+    response = client.get(url, headers=member)
+    assert response.status_code == 200
+    groups = response.json()["grupos"]
+    assert [(g["repeticiones"], g["semanas"], g["registros"]) for g in groups] == [
+        (10, 4, 5),
+        (8, 1, 1),
+    ]
+    assert groups[0]["ultima_fecha"] == business_today().isoformat()
+    client.post(
+        "/auth/register",
+        json={
+            "nombre": "Otra Cuenta",
+            "correo": "other-readiness@example.com",
+            "clave": "password-testing-123",
+        },
+    )
+    token = client.post(
+        "/auth/login",
+        json={"correo": "other-readiness@example.com", "clave": "password-testing-123"},
+    ).json()["access_token"]
+    assert client.get(url, headers={"Authorization": f"Bearer {token}"}).json()["grupos"] == []
+    # Consultar disponibilidad no guarda análisis ni altera el último resultado.
+    assert client.get("/inicio", headers=member).json()["ultimo_analisis"] is None
